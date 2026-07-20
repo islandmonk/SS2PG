@@ -1,0 +1,10 @@
+# Create directory for project
+mkdir /mnt/local_storage/python/SS_2_pg
+
+# make that the current directory
+cd /mnt/local_storage/python/SS_2_pg
+
+# Vreate the virtual environment
+python -m venv .venv
+
+# Activate it (CachyOS/Linux)

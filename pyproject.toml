@@ -1,0 +1,10 @@
+[project]
+name = "ss_2_pg"
+version = "0.1.0"
+description = "An application that migrates data from a SQL Server database to a PostgreSQL one."
+authors = ["Doug Hills <Doug@HillsBrother.com>"]
+readme = "README.md"
+requires-python = ">=3.10"
+
+[project.scripts]
+ss2pg = "ss_2_pg:main"
