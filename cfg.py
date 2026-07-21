@@ -21,6 +21,19 @@ sql_server = {
     # in trusted/internal networks. For production, prefer a proper CA.
     "trust_server_certificate": "yes"
 }
+
+# PostgreSQL connection
+postgres = {
+    "host": "192.168.1.42",
+    "port": "5432", 
+	"database": "target",
+    "user": "SuperUser", 
+    "pwd": "Password123"
+}
+# ----------------------------------------
+
+
+# don't mess with this unless you know what you're doing. The connection string is built from the above parameters.
 sql_server_connection_string = (
     'mssql+pyodbc://{user}:{pwd}@{server}/{database}?driver={driver}&TrustServerCertificate={trust_server_certificate}'.format(
         user=sql_server['user'],
@@ -31,14 +44,6 @@ sql_server_connection_string = (
         trust_server_certificate=sql_server['trust_server_certificate'],
     )
 )
-
-postgres = {
-    "host": "192.168.1.42",
-    "port": "5432", 
-	"database": "target",
-    "user": "SuperUser", 
-    "pwd": "Password123"
-}
 
 postgres_connection_string = (
     f'postgresql+psycopg://{postgres["user"]}:{postgres["pwd"]}@{postgres["host"]}:{postgres["port"]}/{postgres["database"]}'

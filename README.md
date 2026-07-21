@@ -5,7 +5,7 @@ This little script is for migrating data from a SQL Server database to
 a PG one. It is expected that for every table migrated, there is already
 a Postgres table with a schema that can handle the dataframes coming from
 SQL Server.
-the target table in the PG database will be truncated prior to data motion.
+the target table in the PG database will be truncated prior to data transfer.
 Tables with PKs are paged. Heaps are brought over in a single dataframe
 The important knobs/settings are in cfg.py
 ```
