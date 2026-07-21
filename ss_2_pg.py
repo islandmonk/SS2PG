@@ -1,9 +1,12 @@
+from prompt_toolkit.shortcuts import ProgressBar
+from prompt_toolkit.formatted_text import FormattedText
 import concurrent.futures
 import pandas as pd
 import pyodbc
 import sqlalchemy
 import time
 import cfg
+import table_create_script
 
 def source_tables(source_engine: sqlalchemy.engine.base.Engine) -> pd.DataFrame:
     return pd.read_sql(cfg.enumerate_tables_query, source_engine)
@@ -47,57 +50,78 @@ def select_cols(object_id: int, source_engine: sqlalchemy.engine.base.Engine) ->
     return the_column_names if the_column_names is not None else ""
 
 
-def ss_table_name(object_id: int, source_engine: sqlalchemy.engine.base.Engine) -> str:
-    """Return the fully qualified table name for a given object_id."""
-
-    with source_engine.connect() as conn:
-        select_query = """
-            SELECT '[' + s.[name] + '].[' + t.[name] + '] as table_name' 
-            FROM sys.tables as t
-            INNER JOIN sys.schemas as s
-                ON t.schema_id = s.schema_id        
-            WHERE t.object_id = :oid"""
-        result = conn.execute(sqlalchemy.text(select_query), {"oid": object_id})
-        the_table_name = result.scalar_one_or_none()
-
-    if not the_table_name:
-        raise ValueError(f"Could not resolve names for object_id={object_id}")
-
-    return the_table_name
-
-def pg_table_name(object_id: int, source_engine: sqlalchemy.engine.base.Engine) -> str:
-    """Return the fully qualified table name that we expect to see in PG."""
+def table_names(object_id: int, source_engine: sqlalchemy.engine.base.Engine) -> tuple[str, str]:
+    """Return the SQL Server table name and expected PG table name"""
 
     with source_engine.connect() as conn:
         select_query = """
             SELECT 
-                CASE s.[name] 
+                  '[' + s.[name] + '].[' + t.[name] + ']' as sql_server_table_name 
+                , CASE s.[name]
                     WHEN 'dbo' THEN 'public'
                     ELSE s.[name]
-                END + '.' + t.[name] as pg_table_name
+                  END 
+                + '.' + t.[name] as pg_table_name
             FROM sys.tables as t
             INNER JOIN sys.schemas as s
                 ON t.schema_id = s.schema_id        
-            WHERE t.object_id = :oid"""
+            WHERE t.object_id = :oid
+        """
         result = conn.execute(sqlalchemy.text(select_query), {"oid": object_id})
-        the_table_name = result.scalar_one_or_none()
+        row = result.fetchone()
 
-    if not the_table_name:
-        raise ValueError(f"Could not resolve names for object_id={object_id}")
+        if not row:
+            raise ValueError(f"Could not resolve names for object_id={object_id}")
 
-    return the_table_name
+        sql_server_name, pg_name = row[0], row[1]
+
+    return sql_server_name, pg_name
+
+def pg_table_create_script(object_id: int, source_engine: sqlalchemy.engine.base.Engine) -> str:
+    """
+        Return a script that will create a similar table in PG. This is a best-effort attempt, and may not be perfect. 
+        It will only create the source tale's primary key if it has one. There is no context in PG where clustering.
+        All textual datatypes will be created as TEXT, and all numeric datatypes will be created as NUMERIC. This is a best-effort attempt, and may not be 
+        perfect. It will only create the source table's primary key if it has one. There is no context in PG where 
+        clustering is important. No attention will be paid to how the source table is clustered.
+    """
+
+    with source_engine.connect() as conn:
+        select_query = """
+            SELECT 
+                  '[' + s.[name] + '].[' + t.[name] + ']' as sql_server_table_name 
+                , CASE s.[name]
+                    WHEN 'dbo' THEN 'public'
+                    ELSE s.[name]
+                  END 
+                + '.' + t.[name] as pg_table_name
+            FROM sys.tables as t
+            INNER JOIN sys.schemas as s
+                ON t.schema_id = s.schema_id        
+            WHERE t.object_id = :oid
+        """
+        result = conn.execute(sqlalchemy.text(select_query), {"oid": object_id})
+        row = result.fetchone()
+
+        if not row:
+            raise ValueError(f"Could not resolve names for object_id={object_id}")
+
+        sql_server_name, pg_name = row[0], row[1]
+
+    return sql_server_name, pg_name
     
 
-def push_to_pg(df, table_name):
-    df.to_sql(table_name, con=cfg.postgres_connection_string, if_exists='append', index=False)  
+def push_to_pg(df, target_engine: sqlalchemy.engine.base.Engine, table_name: str):
+    # this might not warrant a separate function, but it gives us a place to add
+    # logging or other functionality later if we want to.
+    df.to_sql(table_name, con=target_engine, if_exists='append', index=False)
 
-def process_table(object_id: int, source_engine: sqlalchemy.engine.base.Engine) -> tuple[str, bool, str]:
+def process_table(object_id: int, source_engine: sqlalchemy.engine.base.Engine, target_engine: sqlalchemy.engine.base.Engine) -> tuple[str, bool, str]:
     # pull the source data and push to PG page by page if we have a primary key, otherwise do a full select and push.
     try:
-        table_name = ss_table_name(object_id, source_engine)
-        pg_table_name = pg_table_name(object_id, source_engine)
-        
-        print(f"Processing table {table_name} (object_id={object_id})")
+        table_name, pg_name = table_names(object_id, source_engine)
+
+        print(f"Processing table {table_name} (object_id={object_id}) -> {pg_name}")
 
         pk_fields = pk_cols(object_id, source_engine)
         select_fields = select_cols(object_id, source_engine)
@@ -109,11 +133,11 @@ def process_table(object_id: int, source_engine: sqlalchemy.engine.base.Engine) 
 
             while True:
                 select_query = f"""
-                SELECT {select_fields} 
-                FROM {table_name} 
-                ORDER BY {pk_fields}
-                OFFSET {page_no * cfg.chunk_size} ROWS -- page_no is zero-based.
-                FETCH NEXT {cfg.chunk_size} ROWS ONLY;
+                    SELECT {select_fields} 
+                    FROM {table_name} 
+                    ORDER BY {pk_fields}
+                    OFFSET {page_no * cfg.chunk_size} ROWS -- page_no is zero-based.
+                    FETCH NEXT {cfg.chunk_size} ROWS ONLY;
                 """
 
                 rows = pd.read_sql(select_query, source_engine)
@@ -125,8 +149,8 @@ def process_table(object_id: int, source_engine: sqlalchemy.engine.base.Engine) 
                     break
 
                 # push the rows to their target table in PostgreSQL
-                push_to_pg(rows, table_name)
-                print(f"Fetched {len(rows)} rows from {table_name} (page {page_no})")
+                push_to_pg(rows, target_engine, pg_name)
+                print(f"Fetched {len(rows)} rows from {table_name} -> {pg_name} (page {page_no})")
 
                 page_no += 1
 
@@ -135,8 +159,8 @@ def process_table(object_id: int, source_engine: sqlalchemy.engine.base.Engine) 
         else:
             # no primary key, so we have to do a full select
             select_query = f"""
-            SELECT {select_fields} 
-            FROM {table_name} 
+                SELECT {select_fields} 
+                FROM {table_name} 
             """
             rows = pd.read_sql(select_query, source_engine)
             total = len(rows)
@@ -160,7 +184,11 @@ def main():
         cfg.postgres_connection_string,
         pool_size = cfg.active_threads,
         max_overflow = 2,
-        pool_pre_ping = True,
+        pool_pre_ping = True, 
+        # pre_ping sends a SELECT 1 query to the server to check if the connection is alive. 
+        # if you're seeing a lot of this in your profiler or extended events sessions, that's 
+        # what this is. It is safe to ignore, but if you want to reduce the noise, you can 
+        # remove this parameter.
     )
 
     ss_tables = source_tables(source_engine)
@@ -178,7 +206,7 @@ def main():
 
         results = []
         with concurrent.futures.ThreadPoolExecutor(max_workers=cfg.active_threads) as exe:
-            future_to_table = {exe.submit(process_table, o, source_engine): o for o in object_ids}
+            future_to_table = {exe.submit(process_table, o, source_engine, target_engine): o for o in object_ids}
             for fut in concurrent.futures.as_completed(future_to_table):
                 table = future_to_table[fut]
                 try:
@@ -192,7 +220,9 @@ def main():
                 print(f"{status}: {tbl} -- {msg}")
                 results.append((tbl, ok, msg))
 
-        # small pause between levels to reduce burst load
+        # Small pause between levels because it feels right.
+        # This isn't necessary at all, but it gives the user a 
+        # chance to see the output of the previous level before the next level starts.
         time.sleep(0.1)
 
     print(results)
