@@ -1,6 +1,5 @@
 import sqlalchemy
 import pandas as pd
-import cfg
 
 the_script = """
     -- enumerate tables to migrate
@@ -72,4 +71,4 @@ the_script = """
 """
 
 def source_tables(source_engine: sqlalchemy.engine.base.Engine) -> pd.DataFrame:
-    return pd.read_sql(cfg.enumerate_tables_query, source_engine)
+    return pd.read_sql(the_script, source_engine)
