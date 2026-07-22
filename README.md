@@ -5,8 +5,8 @@ This little script is for migrating data from a SQL Server database to
 a PG one. 
 
 There is a setting in cfg.py (create_pg_target_when_not_exists)
-When this is false and there is no target on PG, the table will
-simply be skipped.
+When this is false and there is no target on PG, the table is
+simply skipped.
 
 The target table in the PG database will be truncated prior to data transfer.
 It would be best to not point this at an important target. This is only
