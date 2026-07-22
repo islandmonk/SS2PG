@@ -2,4 +2,4 @@ pandas
 pyodbc
 SQLAlchemy
 psycopg[binary]
-SQLAlchemy
+prompt_toolkit

@@ -1,6 +1,7 @@
 # On different platforms
 # Linux: need unixodbc (or equivalent) plus the SQL Server ODBC driver
 # Windows: the driver manager is usually present, but users still need the SQL Server ODBC driver
+# Doug@HillsBrother.com
 
 import urllib.parse
 
@@ -9,12 +10,10 @@ package_name = 'SQL Server to PostgreSQL data migration tool'
 active_threads = 3
 
 # If true, the script will attempt to create the target tables in PostgreSQL if they don't exist.
-create_pg_tables = False
+# If the schema doesn't exist, it will also be created. This might not be desired behavior.
+create_pg_tables = True
 
-# This is another thing entirely. Be careful here.
-create_pg_schemas = False
-
-chunk_size = 100000
+chunk_size = 10000
 
 #sql server connection
 sql_server = {

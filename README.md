@@ -8,6 +8,7 @@ SQL Server.
 the target table in the PG database will be truncated prior to data transfer.
 Tables with PKs are paged. Heaps are brought over in a single dataframe
 The important knobs/settings are in cfg.py
+Doug@HillsBrother.com
 ```
 
 ## Run locally

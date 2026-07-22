@@ -1,0 +1,37 @@
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Python packaging
+pip-wheel-metadata/
+*.egg-info/
+*.egg
+
+# IDE/editor configs
+.vscode/
+.idea/
+
+# Environment files
+.env
+.env.*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs and runtime files
+*.log
+
+# SQLAlchemy / build artifacts
+*.sqlite
+
+# Temporary files
+*.swp
+*~

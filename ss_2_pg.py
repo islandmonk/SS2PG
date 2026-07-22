@@ -1,3 +1,6 @@
+'''
+    Doug@HillsBrother.com
+'''
 from prompt_toolkit.shortcuts import ProgressBar
 from prompt_toolkit.formatted_text import FormattedText
 import concurrent.futures
@@ -6,110 +9,9 @@ import pyodbc
 import sqlalchemy
 import time
 import cfg
-import table_create_script
-
-def source_tables(source_engine: sqlalchemy.engine.base.Engine) -> pd.DataFrame:
-    return pd.read_sql(cfg.enumerate_tables_query, source_engine)
-
-def pk_cols(object_id: int, source_engine: sqlalchemy.engine.base.Engine) -> str:
-    """Return a single comma-separated string of PK columns (with brackets), or empty string."""
-    with source_engine.connect() as conn:
-        select_query = """
-            SELECT STRING_AGG('[' + c.name + ']', ', ') WITHIN GROUP (ORDER BY ic.key_ordinal)
-            FROM sys.indexes as i
-            INNER JOIN sys.index_columns as ic
-                ON i.object_id = ic.object_id
-                AND i.index_id = ic.index_id
-            INNER JOIN sys.columns as c
-                ON ic.object_id = c.object_id
-                AND ic.column_id = c.column_id
-            WHERE i.is_primary_key = 1
-              AND i.object_id = :oid
-        """
-        # sqlalchemy syntax for parameterized queries uses :param_name, not ? as in pyodbc.  
-        # See https://docs.sqlalchemy.org/en/20/core/connections.html#sqlalchemy.engine.Connection.execute
-        
-        result = conn.execute(sqlalchemy.text(select_query), {"oid": object_id})
-        the_pk_names = result.scalar_one_or_none()
-    return the_pk_names or ""
-
-
-def select_cols(object_id: int, source_engine: sqlalchemy.engine.base.Engine) -> str:
-    """Return a single comma-separated string of non-calculated columns (with brackets)."""
-    with source_engine.connect() as conn:
-        select_query = """
-            SELECT STRING_AGG('[' + c.name + ']', ', ') WITHIN GROUP (ORDER BY c.column_id)
-            FROM sys.columns as c 
-            WHERE c.object_id = :oid
-            AND c.is_computed = 0
-        """
-
-        result = conn.execute(sqlalchemy.text(select_query), {"oid": object_id})
-        the_column_names = result.scalar_one_or_none()
-    
-    return the_column_names if the_column_names is not None else ""
-
-
-def table_names(object_id: int, source_engine: sqlalchemy.engine.base.Engine) -> tuple[str, str]:
-    """Return the SQL Server table name and expected PG table name"""
-
-    with source_engine.connect() as conn:
-        select_query = """
-            SELECT 
-                  '[' + s.[name] + '].[' + t.[name] + ']' as sql_server_table_name 
-                , CASE s.[name]
-                    WHEN 'dbo' THEN 'public'
-                    ELSE s.[name]
-                  END 
-                + '.' + t.[name] as pg_table_name
-            FROM sys.tables as t
-            INNER JOIN sys.schemas as s
-                ON t.schema_id = s.schema_id        
-            WHERE t.object_id = :oid
-        """
-        result = conn.execute(sqlalchemy.text(select_query), {"oid": object_id})
-        row = result.fetchone()
-
-        if not row:
-            raise ValueError(f"Could not resolve names for object_id={object_id}")
-
-        sql_server_name, pg_name = row[0], row[1]
-
-    return sql_server_name, pg_name
-
-def pg_table_create_script(object_id: int, source_engine: sqlalchemy.engine.base.Engine) -> str:
-    """
-        Return a script that will create a similar table in PG. This is a best-effort attempt, and may not be perfect. 
-        It will only create the source tale's primary key if it has one. There is no context in PG where clustering.
-        All textual datatypes will be created as TEXT, and all numeric datatypes will be created as NUMERIC. This is a best-effort attempt, and may not be 
-        perfect. It will only create the source table's primary key if it has one. There is no context in PG where 
-        clustering is important. No attention will be paid to how the source table is clustered.
-    """
-
-    with source_engine.connect() as conn:
-        select_query = """
-            SELECT 
-                  '[' + s.[name] + '].[' + t.[name] + ']' as sql_server_table_name 
-                , CASE s.[name]
-                    WHEN 'dbo' THEN 'public'
-                    ELSE s.[name]
-                  END 
-                + '.' + t.[name] as pg_table_name
-            FROM sys.tables as t
-            INNER JOIN sys.schemas as s
-                ON t.schema_id = s.schema_id        
-            WHERE t.object_id = :oid
-        """
-        result = conn.execute(sqlalchemy.text(select_query), {"oid": object_id})
-        row = result.fetchone()
-
-        if not row:
-            raise ValueError(f"Could not resolve names for object_id={object_id}")
-
-        sql_server_name, pg_name = row[0], row[1]
-
-    return sql_server_name, pg_name
-    
+import table_create_script as tcs
+import table_metadata as tm 
+import source_tables as st
 
 def push_to_pg(df, target_engine: sqlalchemy.engine.base.Engine, table_name: str):
     # this might not warrant a separate function, but it gives us a place to add
@@ -118,12 +20,46 @@ def push_to_pg(df, target_engine: sqlalchemy.engine.base.Engine, table_name: str
 
 def process_table(object_id: int, source_engine: sqlalchemy.engine.base.Engine, target_engine: sqlalchemy.engine.base.Engine) -> tuple[str, bool, str]:
     # pull the source data and push to PG page by page if we have a primary key, otherwise do a full select and push.
+    table_name = None
+    pg_name = None
+    pk_fields = None
+    select_fields = None
+    select_query = None
+
     try:
-        table_name, pg_name = table_names(object_id, source_engine)
+        table_name, pg_name, pk_fields, select_fields = tm.table_meta_data(object_id, source_engine)
+
+        # does the table exist in the PG target?
+        with target_engine.connect() as conn:
+            result = conn.execute(sqlalchemy.text("""
+                SELECT EXISTS (
+                    SELECT 1 
+                    FROM information_schema.tables 
+                    WHERE table_schema = split_part(:pg_name, '.', 1)
+                    AND table_name = split_part(:pg_name, '.', 2)
+                )
+            """), {"pg_name": pg_name})
+            exists = result.scalar_one_or_none()        
+
+        if not exists:
+            if cfg.create_pg_tables:
+                # create the table in PG
+                create_table_script = tcs.get_create_table_script(object_id, source_engine)
+
+                if not create_table_script:
+                    raise ValueError(f"Could not generate CREATE TABLE script for object_id={object_id}")
+
+                with target_engine.connect() as conn:
+                    conn.execute(sqlalchemy.text(create_table_script))
+                print(f"Created table {pg_name} in PostgreSQL.")
+            else:
+                msg = f"Skipped {table_name} -> {pg_name}: target does not exist and create_pg_tables is False."
+                print(msg)
+                return table_name, False, msg
+
 
         print(f"Processing table {table_name} (object_id={object_id}) -> {pg_name}")
 
-        pk_fields = pk_cols(object_id, source_engine)
         select_fields = select_cols(object_id, source_engine)
 
         if pk_fields:
@@ -167,8 +103,10 @@ def process_table(object_id: int, source_engine: sqlalchemy.engine.base.Engine, 
             return table_name, True, select_query
 
     except Exception as exc:
-        print(f"table_name: {table_name} pk_fields: {pk_fields} select_fields: {select_fields} ")
-        print(f"Error processing table with {select_query}: {exc}")
+        print(
+            f"table_name: {table_name!r} pk_fields: {pk_fields!r} select_fields: {select_fields!r} "
+        )
+        print(f"Error processing table with {select_query!r}: {exc}")
         return f"object_id={object_id}", False, str(exc)
 
 
@@ -186,12 +124,12 @@ def main():
         max_overflow = 2,
         pool_pre_ping = True, 
         # pre_ping sends a SELECT 1 query to the server to check if the connection is alive. 
-        # if you're seeing a lot of this in your profiler or extended events sessions, that's 
-        # what this is. It is safe to ignore, but if you want to reduce the noise, you can 
-        # remove this parameter.
+        # if you're seeing a lot of this in your profiler or extended events sessions, this's 
+        # what that is. It is safe to ignore, but if you want to reduce the chatter, 
+        # you can remove this parameter.
     )
 
-    ss_tables = source_tables(source_engine)
+    ss_tables = st.source_tables(source_engine)
     print(ss_tables.head())
 
     # process tables level-by-level (lvl=0 first)

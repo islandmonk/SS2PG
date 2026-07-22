@@ -1,9 +1,13 @@
+import sqlalchemy
+
 script_maker = """
 DECLARE 
-	  @object_id bigint = 1525580473 -- object_version
+	  @object_id bigint = 1525580473 -- the object_id of the table you want to create a script for
 
       -- Don't touch anything below here unless you know what you're doing. This is a script 
-      -- that will generate a CREATE TABLE statement for the given object_id.
+      -- that will generate a (postgresql) CREATE TABLE statement for the given object_id.
+      -- Doug@HillsBrother.com
+
 	, @cr CHAR(2) = CHAR(13) + CHAR(10) -- carriage return
 	, @tab CHAR(1) = CHAR(9)
 	, @name_column_width int = 40
@@ -11,11 +15,11 @@ DECLARE
 	, @create_table_script varchar(max) = 'CREATE TABLE IF NOT EXISTS '
 
 SELECT @create_table_script = 
-	'CREATE TABLE IF NOT EXISTS '
+	 'CREATE TABLE IF NOT EXISTS '
 	+ CASE s.[name]
 		WHEN 'dbo' THEN 'public'
 		ELSE s.[name]
-	END
+	  END
 	+ '.'
 	+ t.[name]
 	+ ' ( ' + @cr
