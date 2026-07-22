@@ -1,48 +1,20 @@
 import pandas as pd
-import sqlalchemy
+import sqlalchemy as sa
 import cfg
 import table_create_script as tcs
 import table_metadata as tm
 
 
-def push_to_pg(df, target_engine: sqlalchemy.engine.base.Engine, table_name: str):
+def push_to_pg(df, target_engine: sa.engine.base.Engine, table_name: str):
     # This gives us a single place to add logging, retries, or batching later.
     df.to_sql(table_name, con=target_engine, if_exists='append', index=False)
 
+def process_table(
+    object_id: int, 
+    source_engine: sa.engine.base.Engine, 
+    target_engine: sa.engine.base.Engine
+) -> tuple[str, bool, str]:
 
-def pk_cols(object_id: int, source_engine: sqlalchemy.engine.base.Engine) -> str:
-    """Return a single comma-separated string of PK columns (with brackets), or None."""
-    with source_engine.connect() as conn:
-        select_query = """
-            SELECT STRING_AGG('[' + c.name + ']', ', ') WITHIN GROUP (ORDER BY ic.key_ordinal)
-            FROM sys.indexes as i
-            INNER JOIN sys.index_columns as ic
-                ON i.object_id = ic.object_id
-                AND i.index_id = ic.index_id
-            INNER JOIN sys.columns as c
-                ON ic.object_id = c.object_id
-                AND ic.column_id = c.column_id
-            WHERE i.is_primary_key = 1
-              AND i.object_id = :oid
-        """
-        result = conn.execute(sqlalchemy.text(select_query), {"oid": object_id})
-        return result.scalar_one_or_none()
-
-
-def select_cols(object_id: int, source_engine: sqlalchemy.engine.base.Engine) -> str:
-    """Return a single comma-separated string of non-computed columns (with brackets), or None."""
-    with source_engine.connect() as conn:
-        select_query = """
-            SELECT STRING_AGG('[' + c.name + ']', ', ') WITHIN GROUP (ORDER BY c.column_id)
-            FROM sys.columns as c 
-            WHERE c.object_id = :oid
-            AND c.is_computed = 0
-        """
-        result = conn.execute(sqlalchemy.text(select_query), {"oid": object_id})
-        return result.scalar_one_or_none()
-
-
-def process_table(object_id: int, source_engine: sqlalchemy.engine.base.Engine, target_engine: sqlalchemy.engine.base.Engine) -> tuple[str, bool, str]:
     """Process a single source table and write it to the target PostgreSQL engine."""
     table_name = None
     pg_name = None
@@ -55,7 +27,7 @@ def process_table(object_id: int, source_engine: sqlalchemy.engine.base.Engine, 
 
         # does the table exist in the PG target?
         with target_engine.connect() as conn:
-            result = conn.execute(sqlalchemy.text("""
+            result = conn.execute(sa.text("""
                 SELECT EXISTS (
                     SELECT 1 
                     FROM information_schema.tables 
@@ -73,7 +45,7 @@ def process_table(object_id: int, source_engine: sqlalchemy.engine.base.Engine, 
                     raise ValueError(f"Could not generate CREATE TABLE script for object_id={object_id}")
 
                 with target_engine.connect() as conn:
-                    conn.execute(sqlalchemy.text(create_table_script))
+                    conn.execute(sa.text(create_table_script))
                 print(f"Created table {pg_name} in PostgreSQL.")
             else:
                 msg = f"Skipped {table_name} -> {pg_name}: target does not exist and create_pg_tables is False."

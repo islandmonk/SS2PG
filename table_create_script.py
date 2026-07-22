@@ -2,7 +2,7 @@ import sqlalchemy
 
 script_maker = """
 DECLARE 
-	  @object_id bigint = 1525580473 -- the object_id of the table you want to create a script for
+	  @object_id bigint = :oid -- the object_id of the table you want to create a script for
 
       -- Don't touch anything below here unless you know what you're doing. This is a script 
       -- that will generate a (postgresql) CREATE TABLE statement for the given object_id.
@@ -12,20 +12,30 @@ DECLARE
 	, @tab CHAR(1) = CHAR(9)
 	, @name_column_width int = 40
 	, @dt_column_width int = 10
-	, @create_table_script varchar(max) = 'CREATE TABLE IF NOT EXISTS '
+	, @create_table_script varchar(max) 
 
-SELECT @create_table_script = 
-	 'CREATE TABLE IF NOT EXISTS '
-	+ CASE s.[name]
-		WHEN 'dbo' THEN 'public'
-		ELSE s.[name]
-	  END
+SELECT @create_table_script = 'DO $$ ' + @cr + 'BEGIN' + @cr
+
+;WITH x as (
+	SELECT 
+		  t.name as [table_name]
+		, CASE s.[name]
+			WHEN 'dbo' THEN 'public'
+			ELSE s.[name]
+		  END as [schema_name]
+	FROM sys.tables as t
+	INNER JOIN sys.schemas as s
+		ON t.schema_id = s.schema_id
+	WHERE t.object_id = @object_id
+)
+SELECT @create_table_script += 'CREATE SCHEMA IF NOT EXISTS '
+	+ x.[schema_name] + ';' + @cr + @cr
+	+ 'CREATE TABLE IF NOT EXISTS '
+	+ x.[schema_name]
 	+ '.'
-	+ t.[name]
+	+ x.[table_name]
 	+ ' ( ' + @cr
-FROM sys.tables as t
-INNER JOIN sys.schemas as s
-	ON t.schema_id = s.schema_id
+FROM x
 
 SELECT TOP (1) @name_column_width = LEN(c.name) + 4
 FROM sys.columns as c
@@ -101,7 +111,9 @@ BEGIN
 	SELECT @create_table_script += ') ' + @cr
 END
 
-SELECT @create_table_script += ');'
+SELECT @create_table_script += ''');
+END
+$$ LANGUAGE plpgsql;'''
 
 -- this will get the script to appear in the messages tab of SSMS.
 -- comment this out if it isn't important to you.
@@ -113,6 +125,6 @@ SELECT @create_table_script as create_table_script;
 def get_create_table_script(object_id: int, source_engine: sqlalchemy.engine.base.Engine) -> str:
     """Return a CREATE TABLE script for the given SQL Server table object_id."""
     with source_engine.connect() as conn:
-        result = conn.execute(sqlalchemy.text(script_maker), {"object_id": object_id})
+        result = conn.execute(sqlalchemy.text(script_maker), {"oid": object_id})
         create_table_script = result.scalar_one_or_none()
     return create_table_script or ""    

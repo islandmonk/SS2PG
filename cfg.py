@@ -7,7 +7,7 @@ import urllib.parse
 
 package_name = 'SQL Server to PostgreSQL data migration tool'
 
-active_threads = 3
+active_threads = 1
 
 # If true, the script will attempt to create the target tables in PostgreSQL if they don't exist.
 # If the schema doesn't exist, it will also be created. This might not be desired behavior.
@@ -31,9 +31,9 @@ sql_server = {
 postgres = {
     "host": "192.168.1.42",
     "port": "5432", 
-	"database": "target",
-    "user": "SuperUser", 
-    "pwd": "Password123"
+	"database": "custodian",
+    "user": "postgres", 
+    "pwd": "postgres"
 }
 # ----------------------------------------
 # end of configuration section
