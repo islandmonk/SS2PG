@@ -5,10 +5,9 @@ import table_create_script as tcs
 import table_metadata as tm
 
 
-def push_to_pg(df, target_engine: sa.engine.base.Engine, table_name: str):
-    # This gives us a single place to add logging, retries, or batching later.
-    table = table_name.split('.')[-1]  # get the table name without the schema
-    schema = table_name.split('.')[0]  # get the schema name
+def push_to_pg(df, target_engine: sa.engine.base.Engine, two_part_table_name: str):
+    table = two_part_table_name.split('.')[-1]  
+    schema = two_part_table_name.split('.')[0]  
 
     df.to_sql(table, con=target_engine, schema=schema, if_exists='append', index=False)
 
@@ -84,6 +83,10 @@ def process_table(
 
         print(f"Processing table {table_name} (object_id={object_id}) -> {pg_name}")
 
+        # TRUNCATE the target table 
+        with target_engine.begin() as trgt_conn:
+            trgt_conn.execute(sa.text(f"TRUNCATE TABLE {pg_name}"))
+
         if select_fields is None:
             select_fields = select_cols(object_id, source_engine)
 
@@ -99,7 +102,10 @@ def process_table(
                     FETCH NEXT {cfg.chunk_size} ROWS ONLY;
                 """
 
-                print(f'select_query: {select_query} -- page_no={page_no}')
+                if page_no == 0:
+                    print(f"select_query: {select_query} -- page_no={page_no}")
+                else:   
+                    print(f'-- page_no={page_no}')
 
                 rows = pd.read_sql(select_query, source_engine)
 

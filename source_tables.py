@@ -16,6 +16,7 @@ the_script = """
         INNER JOIN sys.schemas as s
             ON t.schema_id = s.schema_id
         WHERE t.type_desc = 'USER_TABLE'
+--AND t.name = 'file'
     )
     , tbls as (
         SELECT t.table_name, t.pg_table_name, t.object_id, 0 as lvl

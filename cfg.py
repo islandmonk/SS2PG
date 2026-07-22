@@ -9,7 +9,7 @@ package_name = 'SQL Server to PostgreSQL data migration tool'
 
 active_threads = 1
 
-# If true, the script will attempt to create the target tables in PostgreSQL if they don't exist.
+# If True, the script will attempt to create the target table in PostgreSQL if it doesn't exist.
 # If the schema doesn't exist, it will also be created. This might not be desired behavior.
 create_pg_target_when_not_exists = True
 
