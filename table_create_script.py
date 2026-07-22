@@ -35,12 +35,12 @@ SELECT @create_table_script += 'CREATE SCHEMA IF NOT EXISTS '
 	+ '.'
 	+ x.[table_name]
 	+ ' ( ' + @cr
-FROM x
+FROM x;
 
 SELECT TOP (1) @name_column_width = LEN(c.name) + 4
 FROM sys.columns as c
 WHERE c.object_id = @object_id
-ORDER BY LEN(c.name) DESC
+ORDER BY LEN(c.name) DESC;
 
 SELECT @create_table_script +=
 	  @tab
@@ -68,6 +68,7 @@ INNER JOIN (
 		, CASE
 			WHEN x.[name] LIKE '%int' THEN 'bigint' 
 			WHEN x.[name] LIKE '%varchar%' THEN 'text'
+			WHEN x.[name] LIKE '%datetime%' THEN 'timestamp'
 			ELSE x.[name]
 		  END as target_type 
 	FROM sys.types as x
@@ -75,7 +76,7 @@ INNER JOIN (
 	ON c.system_type_id = ty.system_type_id
 WHERE t.object_id = @object_id
 AND ty.source_type NOT IN ('sysname')
-ORDER BY c.column_id
+ORDER BY c.column_id;
 
 -- do we have a primary key?
 IF EXISTS (
@@ -106,25 +107,30 @@ BEGIN
 		AND ic.column_id = c.column_id
 	WHERE i.is_primary_key = 1
 	AND i.object_id = @object_id
-	ORDER BY i.object_id, ic.index_column_id
+	ORDER BY i.object_id, ic.index_column_id;
 
-	SELECT @create_table_script += ') ' + @cr
+	SELECT @create_table_script += ') ' + @cr;
 END
 
-SELECT @create_table_script += ''');
+SELECT @create_table_script += ');
 END
-$$ LANGUAGE plpgsql;'''
+$$ LANGUAGE plpgsql;'
 
 -- this will get the script to appear in the messages tab of SSMS.
--- comment this out if it isn't important to you.
-Print @create_table_script;
+-- un-comment this out if you need to test this in ssms.
+-- Print @create_table_script;
 
 SELECT @create_table_script as create_table_script;
 """
 
 def get_create_table_script(object_id: int, source_engine: sqlalchemy.engine.base.Engine) -> str:
     """Return a CREATE TABLE script for the given SQL Server table object_id."""
+    # print(f"Generating CREATE TABLE script for object_id = {object_id}")
     with source_engine.connect() as conn:
+        # print(f"CREATE TABLE script for object_id = {object_id}:\n{script_maker}") 
         result = conn.execute(sqlalchemy.text(script_maker), {"oid": object_id})
+        # print(f"result: {result}")
         create_table_script = result.scalar_one_or_none()
+        # print(f"CREATE TABLE script for object_id = {object_id}:\n{create_table_script}")
+
     return create_table_script or ""    

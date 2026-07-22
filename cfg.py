@@ -11,7 +11,7 @@ active_threads = 1
 
 # If true, the script will attempt to create the target tables in PostgreSQL if they don't exist.
 # If the schema doesn't exist, it will also be created. This might not be desired behavior.
-create_pg_tables = True
+create_pg_target_when_not_exists = True
 
 chunk_size = 10000
 
