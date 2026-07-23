@@ -16,7 +16,7 @@ the_script = """
         INNER JOIN sys.schemas as s
             ON t.schema_id = s.schema_id
         WHERE t.type_desc = 'USER_TABLE'
---AND t.name = 'file'
+    --AND t.name = 'column'
     )
     , tbls as (
         SELECT t.table_name, t.pg_table_name, t.object_id, 0 as lvl
@@ -68,6 +68,7 @@ the_script = """
         AND i.[index_id] = ips.[index_id]
         AND ips.alloc_unit_type_desc = 'IN_ROW_DATA'
     WHERE x.rn = 1
+AND x.table_name LIKE '%column%'
     ORDER BY x.lvl, x.table_name
 """
 

@@ -9,14 +9,38 @@ def push_to_pg(df, target_engine: sa.engine.base.Engine, two_part_table_name: st
     table = two_part_table_name.split('.')[-1]  
     schema = two_part_table_name.split('.')[0]  
 
-    df.to_sql(table, con=target_engine, schema=schema, if_exists='append', index=False)
+    type_mappings = {}
+
+    # loop through result's columns. Make conversions for any data types that are not compatible with PostgreSQL. 
+    # For example, SQL Server's datetime type should be converted to PG's timestamp type.
+    for col in df.columns:
+        dtype = df[col].dtype
+        print(f"Column {col} has dtype {dtype}")
+
+        if pd.api.types.is_integer_dtype(df[col]):
+            type_mappings[col] = sa.types.BIGINT()
+
+        elif pd.api.types.is_float_dtype(df[col]):
+            type_mappings[col] = sa.types.FLOAT()
+
+        elif pd.api.types.is_bool_dtype(df[col]):
+            type_mappings[col] = sa.types.BOOLEAN()
+
+        elif pd.api.types.is_datetime64_any_dtype(df[col]):
+            type_mappings[col] = sa.types.TIMESTAMP()
+
+        else:  # object/string columns
+            type_mappings[col] = sa.types.TEXT()
+
+    print(f"Pushing {len(df)} rows to PostgreSQL table {schema}.{table} with type mapping: {type_mappings}")
+    df.to_sql(table, con=target_engine, schema=schema, if_exists='append', index=False, dtype=type_mappings)
 
 def process_table(
     object_id: int, 
     source_engine: sa.engine.base.Engine, 
     target_engine: sa.engine.base.Engine
 ) -> tuple[str, bool, str]:
-    print(f"Processing table with object_id={object_id}")
+    #print(f"process_table object_id = {object_id}")
 
     """Process a single source table and write it to the target PostgreSQL engine."""
     table_name = None
@@ -99,14 +123,16 @@ def process_table(
                     FROM {table_name} 
                     ORDER BY {pk_fields}
                     OFFSET {page_no * cfg.chunk_size} ROWS -- page_no is zero-based.
-                    FETCH NEXT {cfg.chunk_size} ROWS ONLY;
+                    FETCH NEXT 5 ROWS ONLY;
                 """
 
                 if page_no == 0:
-                    print(f"select_query: {select_query} -- page_no={page_no}")
+                    # print(f"select_query: {select_query} -- page_no={page_no}")
+                    pass
                 else:   
-                    print(f'-- page_no={page_no}')
-
+                    # print(f'-- page_no={page_no}')
+                    pass
+                    
                 rows = pd.read_sql(select_query, source_engine)
 
                 if not rows.empty:
