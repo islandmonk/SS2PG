@@ -68,7 +68,7 @@ the_script = """
         AND i.[index_id] = ips.[index_id]
         AND ips.alloc_unit_type_desc = 'IN_ROW_DATA'
     WHERE x.rn = 1
-AND x.table_name LIKE '%column%'
+AND x.table_name NOT LIKE '%object_version%'
     ORDER BY x.lvl, x.table_name
 """
 

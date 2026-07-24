@@ -69,6 +69,7 @@ INNER JOIN (
 			WHEN x.[name] LIKE '%int' THEN 'bigint' 
 			WHEN x.[name] LIKE '%varchar%' THEN 'text'
 			WHEN x.[name] LIKE '%datetime%' THEN 'timestamp'
+			WHEN x.[name] = 'bit' THEN 'boolean'
 			ELSE x.[name]
 		  END as target_type 
 	FROM sys.types as x

@@ -7,13 +7,18 @@ import urllib.parse
 
 package_name = 'SQL Server to PostgreSQL data migration tool'
 
-active_threads = 2
+active_threads = 4
 
 # If True, the script will attempt to create the target table in PostgreSQL if it doesn't exist.
 # If the schema doesn't exist, it will also be created. This might not be desired behavior.
-create_pg_target_when_not_exists = True
+create_pg_target_when_not_exists = False
 
+# when I'm paging a table, how many rows per page?
 chunk_size = 10000
+
+I_am_testing = False
+
+log_file = '/mnt/local_storage/pg_logs/paging_queries.txt'
 
 #sql server connection
 sql_server = {
@@ -54,3 +59,8 @@ sql_server_connection_string = (
 postgres_connection_string = (
     f'postgresql+psycopg://{postgres["user"]}:{postgres["pwd"]}@{postgres["host"]}:{postgres["port"]}/{postgres["database"]}'
 )
+
+def log_to_the_log_file (message: str):
+    with open(log_file, 'a', encoding="utf-8") as f:
+        f.write(message)
+        f.write("\n")

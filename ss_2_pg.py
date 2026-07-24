@@ -66,7 +66,7 @@ def main():
         # chance to see the output of the previous level before the next level starts.
         time.sleep(0.1)
 
-    print(results)
+    #print(results)
     return 0
 
 

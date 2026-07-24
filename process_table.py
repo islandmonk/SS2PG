@@ -4,36 +4,89 @@ import cfg
 import table_create_script as tcs
 import table_metadata as tm
 
-
 def push_to_pg(df, target_engine: sa.engine.base.Engine, two_part_table_name: str):
     table = two_part_table_name.split('.')[-1]  
     schema = two_part_table_name.split('.')[0]  
+    columns = ", ".join(df.columns)
 
-    type_mappings = {}
+    coercion = {
+        "bigint": "bigint",
+        "int": "bigint",
+        "int16": "bigint",
+        "int32": "bigint",
+        "int64": "bigint",
+        "smallint": "bigint",
+        "tinyint": "bigint",
+        "bit": "boolean",
+        "bool": "boolean",
+        "decimal": "numeric",
+        "numeric": "numeric",
+        "money": "numeric",
+        "smallmoney": "numeric",
+        "float": "double precision",
+        "float64": "double precision",
+        "float32": "double precision",
+        "real": "double precision",
+        "date": "date",
+        "datetime64[us]":"timestamp",
+        "datetime": "timestamp",
+        "datetime2": "timestamp",
+        "smalldatetime": "timestamp",
+        "str": "text",
+        "time": "time",
+        "char": "text",
+        "nchar": "text",
+        "varchar": "text",
+        "nvarchar": "text",
+        "text": "text",
+        "object": "text",
+        "ntext": "text",
+        "binary": "bytea",
+        "varbinary": "bytea",
+        "image": "bytea",
+        "uniqueidentifier": "uuid",
+    }
 
-    # loop through result's columns. Make conversions for any data types that are not compatible with PostgreSQL. 
-    # For example, SQL Server's datetime type should be converted to PG's timestamp type.
-    for col in df.columns:
-        dtype = df[col].dtype
-        print(f"Column {col} has dtype {dtype}")
+    rows = []
+    for row in df.itertuples(index=False, name=None):
+        values = []
+        for val, col in zip(row, df.columns):
+            dtype = str(df[col].dtype)
+            pg_type = coercion.get(dtype, "")
 
-        if pd.api.types.is_integer_dtype(df[col]):
-            type_mappings[col] = sa.types.BIGINT()
+            if not pg_type:
+                print(f"What should I do with this dtype? {dtype} -> {pg_type}")
 
-        elif pd.api.types.is_float_dtype(df[col]):
-            type_mappings[col] = sa.types.FLOAT()
+            if pd.isna(val):
+                values.append(f"NULL::{pg_type}")
 
-        elif pd.api.types.is_bool_dtype(df[col]):
-            type_mappings[col] = sa.types.BOOLEAN()
+            elif isinstance(val, str) or pg_type == 'text':
+                escaped = val.replace("'", "''")
+                values.append(f"'{escaped}'::{pg_type}")
 
-        elif pd.api.types.is_datetime64_any_dtype(df[col]):
-            type_mappings[col] = sa.types.TIMESTAMP()
+            elif pg_type == 'timestamp':
+                values.append(f"'{val}'::{pg_type}")
 
-        else:  # object/string columns
-            type_mappings[col] = sa.types.TEXT()
+            else:
+                values.append(f"{val}::{pg_type}")
 
-    print(f"Pushing {len(df)} rows to PostgreSQL table {schema}.{table} with type mapping: {type_mappings}")
-    df.to_sql(table, con=target_engine, schema=schema, if_exists='append', index=False, dtype=type_mappings)
+        rows.append("(" + ", ".join(values) + ")")
+    values_blob = ",\n    ".join(rows)
+
+    the_big_insert_command = f"INSERT INTO {schema}.{table} ({columns}) \n VALUES \n    {values_blob};"
+        
+    print(f"Pushing {len(df)} rows to {schema}.{table}")
+    cfg.log_to_the_log_file(the_big_insert_command)
+    #print(the_big_insert_command)
+    #print("------------------------------------")
+
+    with target_engine.begin() as conn:
+        result = conn.execute(sa.text(the_big_insert_command))
+        print(f"result: {result.rowcount}")
+
+    #raise RuntimeError("stop here")
+
+    # df.to_sql(table, con=target_engine, schema=schema, if_exists='append', index=False, method=insert_method)
 
 def process_table(
     object_id: int, 
@@ -114,6 +167,12 @@ def process_table(
         if select_fields is None:
             select_fields = select_cols(object_id, source_engine)
 
+        if cfg.I_am_testing:
+            page_row_count = 5
+
+        else:
+            page_row_count = cfg.chunk_size
+
         if pk_fields:
             page_no = 0
 
@@ -123,7 +182,7 @@ def process_table(
                     FROM {table_name} 
                     ORDER BY {pk_fields}
                     OFFSET {page_no * cfg.chunk_size} ROWS -- page_no is zero-based.
-                    FETCH NEXT 5 ROWS ONLY;
+                    FETCH NEXT {page_row_count} ROWS ONLY;
                 """
 
                 if page_no == 0:
