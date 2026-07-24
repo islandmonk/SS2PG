@@ -61,6 +61,7 @@ postgres_connection_string = (
 )
 
 def log_to_the_log_file (message: str):
-    with open(log_file, 'a', encoding="utf-8") as f:
-        f.write(message)
-        f.write("\n")
+    if I_am_testing:
+        with open(log_file, 'a', encoding="utf-8") as f:
+            f.write(message)
+            f.write("\n")
