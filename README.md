@@ -23,11 +23,13 @@ The SQL commands executed agains both engines are crafted in this script.
 These scripts are exposed in the logging file. Some of the commands get huge.
 You can tell it how much of the command you want to see in the log.
 
+see: cfg.truncated_command_length
+
 Data type coercion is configurable. I'll have a page dedicated to just 
 that so it is more straight forward to maintain.
 Right now, the only way to mess with the coercion configuration is through
-text manipulation in the TSQL variable @dtc's definition. You can definitely
-experiment with that. 
+text manipulation in the TSQL variable @dtc's definition (table_create_script.py). 
+You can definitely experiment with that. 
 
 IMPORTANT: 
     The user defined in the cfg for the sql server connection must have the
