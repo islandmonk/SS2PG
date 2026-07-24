@@ -1,4 +1,7 @@
 import sqlalchemy
+import cfg
+
+c_log = cfg.log_to_the_log_file
 
 the_script = """
     SELECT 

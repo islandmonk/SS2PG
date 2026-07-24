@@ -1,5 +1,8 @@
 import sqlalchemy
 import pandas as pd
+import cfg
+
+c_log = cfg.log_to_the_log_file
 
 the_script = """
     -- enumerate tables to migrate
@@ -45,7 +48,7 @@ the_script = """
         INNER JOIN tbls 
             ON fk.referenced_object_id = tbls.object_id
     )
-    SELECT x.table_name, x.object_id, x.lvl, COALESCE(ips.record_count, 0) as source_row_count
+    SELECT TOP (10) x.table_name, x.object_id, x.lvl, COALESCE(ips.record_count, 0) as source_row_count
     FROM (
         SELECT 
             *

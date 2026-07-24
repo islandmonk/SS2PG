@@ -5,19 +5,21 @@
 
 import urllib.parse
 from datetime import datetime
+import inspect
 
 package_name = 'SQL Server to PostgreSQL data migration tool'
 
-active_threads = 4
+active_threads = 1
 
-# If True, the script will attempt to create the target table in PostgreSQL if it doesn't exist.
+# If True, and the target table doesn't exist, the script will attempt to create the target table in PG.
 # If the schema doesn't exist, it will also be created. This might not be desired behavior.
-create_pg_target_when_not_exists = False
+create_pg_target_when_not_exists = True
 
 # when I'm paging a table, how many rows per page?
 chunk_size = 10000
 
-I_am_testing = True
+I_am_logging = True
+I_am_testing = False # True keeps the data volumes lower
 
 yes_log_the_whole_huge_command = False
 
@@ -43,7 +45,7 @@ sql_server = {
 postgres = {
     "host": "192.168.1.42",
     "port": "5432", 
-	"database": "custodian",
+	"database": "dtctest",
     "user": "postgres", 
     "pwd": "postgres"
 }
@@ -51,7 +53,7 @@ postgres = {
 # end of configuration section
 
 
-# don't mess with this unless you know what you're doing. The connection string is built from the above parameters.
+# Be careful. The connection strings are built from the above parameters.
 sql_server_connection_string = (
     'mssql+pyodbc://{user}:{pwd}@{server}/{database}?driver={driver}&TrustServerCertificate={trust_server_certificate}'.format(
         user=sql_server['user'],
@@ -73,7 +75,11 @@ def empty_the_log_file():
 
 def log_to_the_log_file (subject: str, body: str = ""):
     body_text = ''
-    if I_am_testing:
+    if I_am_testing or I_am_logging:
+        # Get the calling module name
+        caller_frame = inspect.currentframe().f_back
+        caller_module = inspect.getmodule(caller_frame).__name__
+        
         if body:
             if yes_log_the_whole_huge_command or len(body) <= truncated_command_length:
                 body_text = body
@@ -81,7 +87,7 @@ def log_to_the_log_file (subject: str, body: str = ""):
                 remaining_length = len(body) - truncated_command_length
                 body_text = body[:truncated_command_length] + " . . . + [" + str(remaining_length) + "]"
 
-        first_line = f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] " + subject
+        first_line = f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] [{caller_module}] " + subject
 
         with open(log_file, 'a', encoding="utf-8") as f:
             f.write(first_line + '\n')

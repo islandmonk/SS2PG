@@ -4,58 +4,24 @@ import cfg
 import table_create_script as tcs
 import table_metadata as tm
 
+c_log = cfg.log_to_the_log_file
+
 def push_to_pg(df, target_engine: sa.engine.base.Engine, two_part_table_name: str):
     table = two_part_table_name.split('.')[-1]  
     schema = two_part_table_name.split('.')[0]  
     columns = ", ".join(df.columns)
 
-    coercion = {
-        "bigint": "bigint",
-        "int": "bigint",
-        "int16": "bigint",
-        "int32": "bigint",
-        "int64": "bigint",
-        "smallint": "bigint",
-        "tinyint": "bigint",
-        "bit": "boolean",
-        "bool": "boolean",
-        "decimal": "numeric",
-        "numeric": "numeric",
-        "money": "numeric",
-        "smallmoney": "numeric",
-        "float": "double precision",
-        "float64": "double precision",
-        "float32": "double precision",
-        "real": "double precision",
-        "date": "date",
-        "datetime64[us]":"timestamp",
-        "datetime": "timestamp",
-        "datetime2": "timestamp",
-        "smalldatetime": "timestamp",
-        "str": "text",
-        "time": "time",
-        "char": "text",
-        "nchar": "text",
-        "varchar": "text",
-        "nvarchar": "text",
-        "text": "text",
-        "object": "text",
-        "ntext": "text",
-        "binary": "bytea",
-        "varbinary": "bytea",
-        "image": "bytea",
-        "uniqueidentifier": "uuid",
-    }
+    target_columns = existing_target_columns(pg_name=pg_name, target_engine=target_engine)
+    print (target_columns)
 
     rows = []
     for row in df.itertuples(index=False, name=None):
         values = []
         for val, col in zip(row, df.columns):
-            dtype = str(df[col].dtype)
-            pg_type = coercion.get(dtype, "")
+            pg_type = str(target_columns.get(df[col].dtype))
 
             if not pg_type:
-                cfg.log_to_the_log_file(f"What should I do with this dtype? {dtype} -> {pg_type}")
+                c_log(f"What should I do with this dtype? {dtype} -> {pg_type}")
 
             if pd.isna(val):
                 values.append(f"NULL::{pg_type}")
@@ -75,15 +41,38 @@ def push_to_pg(df, target_engine: sa.engine.base.Engine, two_part_table_name: st
 
     the_big_insert_command = f"INSERT INTO {schema}.{table} ({columns}) \n VALUES \n    {values_blob};"
         
-    cfg.log_to_the_log_file(f"Pushing {len(df)} rows to {schema}.{table}")
-    cfg.log_to_the_log_file(f"{schema}.{table}", the_big_insert_command)
-    cfg.log_to_the_log_file("------------------------------------")
+    c_log(f"Pushing {len(df)} rows to {schema}.{table}")
+    c_log(f"{schema}.{table}", the_big_insert_command)
+    c_log("------------------------------------")
 
     with target_engine.begin() as conn:
         result = conn.execute(sa.text(the_big_insert_command))
-        cfg.log_to_the_log_file(f"{schema}.{table}: {result.rowcount} rows")
+        c_log(f"{schema}.{table}: {result.rowcount} rows")
 
     #raise RuntimeError("stop here")
+
+def existing_target_columns(
+    pg_name: str, 
+    target_engine: sa.engine.base.Engine
+) -> dict[str, str]:
+
+    column_enumeration_text = f"""
+        SELECT c.column_name, c.data_type 
+        FROM information_schema.columns as c
+        WHERE table_schema = split_part('{pg_name}', '.', 1)
+        AND table_name = split_part('{pg_name}', '.', 2)
+    """
+
+    try:
+        with target_engine.connect() as conn:
+            result = conn.execute(sa.text(column_enumeration_text))
+            rows = result.fetchall()
+
+            # populate the dictionary
+            return {row[0]: row[1] for row in rows}
+
+    except Exception as e:
+        raise RuntimeError(f"Failed to get columns for {pg_name}: {e}")        
 
 def process_table(
     object_id: int, 
@@ -116,14 +105,22 @@ def process_table(
             result = conn.execute(sa.text(table_existence_text), {"pg_name": pg_name})
             exists = result.scalar_one_or_none()
 
-            # print(f"Table {pg_name} exists in PostgreSQL: {exists}")
+        if exists:
+            # The table exists. Right now, we know what we'd like the target columns types
+            # should be. Right here, we need to see what they actually are. We're going to
+            # do our best to push what we've got into those holes. This doesn't always work
 
-        if not exists:
-            cfg.log_to_the_log_file(f"Table {pg_name} does not exist in PostgreSQL. Creating it.")
+            target_columns = existing_target_columns(pg_name=pg_name, target_engine=target_engine)
+            print (target_columns)
+
+        else:
             if cfg.create_pg_target_when_not_exists:
+                c_log(f"Table {pg_name} does not exist in PostgreSQL. Create it.")
+
+                c_log(f"call tcs.get_create_table_script.")
                 create_table_script = tcs.get_create_table_script(object_id, source_engine)
 
-                cfg.log_to_the_log_file(f"CREATE TABLE script for {pg_name}:\n{create_table_script}")
+                c_log(f"CREATE TABLE script for {pg_name}:\n{create_table_script}")
 
                 if not create_table_script:
                     raise ValueError(f"Could not generate CREATE TABLE script for object_id = {object_id}")
@@ -143,18 +140,18 @@ def process_table(
                     exists = result.scalar_one_or_none()    
 
                 if exists:
-                    cfg.log_to_the_log_file(f"Successfully created table {pg_name} in PostgreSQL.")
+                    c_log(f"Successfully created table {pg_name} in PostgreSQL.")
 
                 else:
-                    cfg.log_to_the_log_file(f"Failed to create table {pg_name} in PostgreSQL.")
+                    c_log(f"Failed to create table {pg_name} in PostgreSQL.")
                     return table_name, False, msg
 
             else:
                 msg = f"Skipped {table_name} -> {pg_name}: target does not exist and create_pg_target_when_not_exists is False."
-                cfg.log_to_the_log_file(msg)
+                c_log(msg)
                 return table_name, False, msg
 
-        cfg.log_to_the_log_file(f"Processing table {table_name} (object_id={object_id}) -> {pg_name}")
+        c_log(f"Processing table {table_name} (object_id = {object_id}) -> {pg_name}")
 
         # TRUNCATE the target table 
         with target_engine.begin() as trgt_conn:
@@ -170,14 +167,14 @@ def process_table(
             page_row_count = cfg.chunk_size
 
         if pk_fields:
-            page_no = 0
+            page_no = 0 # page_no is zero-based.
 
             while True:
                 select_query = f"""
                     SELECT {select_fields} 
                     FROM {table_name} 
                     ORDER BY {pk_fields}
-                    OFFSET {page_no * cfg.chunk_size} ROWS -- page_no is zero-based.
+                    OFFSET {page_no * cfg.chunk_size} ROWS
                     FETCH NEXT {page_row_count} ROWS ONLY;
                 """
 
@@ -196,7 +193,7 @@ def process_table(
                     break
 
                 push_to_pg(rows, target_engine, pg_name)
-                cfg.log_to_the_log_file(f"Fetched {len(rows)} rows from {table_name} -> {pg_name} (page {page_no})")
+                c_log(f"Fetched {len(rows)} rows from {table_name} -> {pg_name} (page {page_no})")
 
                 page_no += 1
 
@@ -210,8 +207,8 @@ def process_table(
         return table_name, True, select_query
 
     except Exception as exc:
-        cfg.log_to_the_log_file(
-            f"table_name: {table_name!r} pk_fields: {pk_fields!r} select_fields: {select_fields!r} "
+        c_log(
+            f"ERROR: process_table: {table_name!r} pk_fields: {pk_fields!r} select_fields: {select_fields!r} "
         )
-        cfg.log_to_the_log_file(f"Error processing table with {select_query!r}: {exc}")
+        c_log(f"Error processing table with {select_query!r}: {exc}")
         return f"object_id = {object_id}", False, str(exc)

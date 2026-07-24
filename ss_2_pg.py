@@ -12,6 +12,8 @@ import cfg
 import source_tables as st
 import process_table as pt
 
+c_log = cfg.log_to_the_log_file
+
 
 def main():
     if cfg.clear_log_file_at_start:
@@ -29,10 +31,10 @@ def main():
         pool_size = cfg.active_threads,
         max_overflow = 2,
         pool_pre_ping = True, 
-        # pre_ping sends a SELECT 1 query to the server to check if the connection is alive. 
+        # pool_pre_ping sends a SELECT 1 query to the server to check if the connection is alive. 
         # if you're seeing a lot of this in your profiler or extended events sessions, this's 
         # what that is. It is safe to ignore, but if you want to reduce the chatter, 
-        # you can remove this parameter.
+        # you can remove/falsify this parameter.
     )
 
     ss_tables = st.source_tables(source_engine)

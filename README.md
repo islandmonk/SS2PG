@@ -12,8 +12,22 @@ The target table in the PG database will be truncated prior to data transfer.
 It would be best to not point this at an important target. This is only
 to facilitate populating a PG database for development purposes.
 
+I don't see any reason against this eventually hardening to the point that 
+it could be used to orchestrate ETL processes or other sorts of jobs where,
+for whatever reason, the available tools didn't get you all the way there.
+
 Tables with PKs are paged. Heaps are brought over in a single dataframe
 The important knobs/settings are in cfg.py
+
+The SQL commands executed agains both engines are crafted in this script.
+These scripts are exposed in the logging file. Some of the commands get huge.
+You can tell it how much of the command you want to see in the log.
+
+Data type coercion is configurable. I'll have a page dedicated to just 
+that so it is more straight forward to maintain.
+Right now, the only way to mess with the coercion configuration is through
+text manipulation in the TSQL variable @dtc's definition. You can definitely
+experiment with that. 
 
 IMPORTANT: 
     The user defined in the cfg for the sql server connection must have the
@@ -35,7 +49,7 @@ Doug@HillsBrother.com
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-# for me: source .venv/bin/activate.fish
+# for fish: source .venv/bin/activate.fish
 ```
 
 2. Install the project:

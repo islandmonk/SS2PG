@@ -1,20 +1,72 @@
 import sqlalchemy
+import cfg
+
+c_log = cfg.log_to_the_log_file
 
 script_maker = """
+SET NOCOUNT ON;
+
 DECLARE 
 	  @object_id bigint = :oid -- the object_id of the table you want to create a script for
 
-      -- Don't touch anything below here unless you know what you're doing. This is a script 
-      -- that will generate a (postgresql) CREATE TABLE statement for the given object_id.
+      -- Be careful below here. This is a script, when executed against an actual @object_id, 
+      -- will generate a corresponding postgres CREATE TABLE statement.
       -- Doug@HillsBrother.com
 
 	, @cr CHAR(2) = CHAR(13) + CHAR(10) -- carriage return
 	, @tab CHAR(1) = CHAR(9)
 	, @name_column_width int = 40
-	, @dt_column_width int = 10
+	, @dt_column_width int = 15
 	, @create_table_script varchar(max) 
 
 SELECT @create_table_script = 'DO $$ ' + @cr + 'BEGIN' + @cr
+
+-- for now, this is where the data type coercions are configured
+-- It's possible to put values in here that don't make sence and,
+-- therefore, won't give meaningful results.
+
+DECLARE @dtc TABLE (
+	source_type varchar(32) PRIMARY KEY
+	, pg_type varchar(32) NOT NULL
+);
+
+INSERT @dtc (source_type, pg_type)
+VALUES 
+	  ('bigint', 'bigint')
+	, ('binary', 'binary')
+	, ('bit', 'bit')
+	, ('char', 'char')
+	, ('date', 'date')
+	, ('datetime', 'timestamp(3)')
+	, ('datetime2', 'timestamp(3)')
+	, ('datetimeoffset', 'datetimeoffset')
+	, ('decimal', 'decimal')
+	, ('float', 'float')
+	, ('geography', 'geography')
+	, ('geometry', 'geometry')
+	, ('hierarchyid', 'hierarchyid')
+	, ('image', 'image')
+	, ('int', 'bigint')
+	, ('json', 'json')
+	, ('money', 'money')
+	, ('nchar', 'text')
+	, ('ntext', 'text')
+	, ('numeric', 'numeric')
+	, ('nvarchar', 'text')
+	, ('real', 'real')
+	, ('smalldatetime', 'timestamp(3)')
+	, ('smallint', 'smallint')
+	, ('smallmoney', 'smallmoney')
+	, ('sysname', 'text')
+	, ('text', 'text')
+	, ('time', 'timestamp(3)')
+	, ('timestamp', 'bigserial') -- ?
+	, ('tinyint', 'bigint')
+	, ('uniqueidentifier', 'uuid')
+	, ('varbinary', 'bytea')
+	, ('varchar', 'text')
+	, ('vector', 'vector')
+	, ('xml', 'xml')	 
 
 ;WITH x as (
 	SELECT 
@@ -51,8 +103,12 @@ SELECT @create_table_script +=
 	+ LOWER(c.name) 
 	-- make it pretty
 	+ REPLICATE(' ', @name_column_width - LEN(c.name))
-	+ ty.[target_type]
-	+ REPLICATE(' ', @dt_column_width - LEN(ty.[target_type]))
+	+ dtc.[pg_type]
+	+ CASE 
+		WHEN @dt_column_width <= LEN(dtc.[pg_type])
+		THEN ' ' 
+		ELSE REPLICATE(' ', @dt_column_width - LEN(dtc.[pg_type]))
+	  END
 	+ CASE c.is_nullable
 		WHEN 1 THEN '    NULL'
 		ELSE 'NOT NULL'
@@ -61,22 +117,12 @@ SELECT @create_table_script +=
 FROM sys.tables as t
 INNER JOIN sys.columns as c
 	ON t.object_id = c.object_id
-INNER JOIN (
-	SELECT 
-		  x.system_type_id
-		, x.name as source_type
-		, CASE
-			WHEN x.[name] LIKE '%int' THEN 'bigint' 
-			WHEN x.[name] LIKE '%varchar%' THEN 'text'
-			WHEN x.[name] LIKE '%datetime%' THEN 'timestamp'
-			WHEN x.[name] = 'bit' THEN 'boolean'
-			ELSE x.[name]
-		  END as target_type 
-	FROM sys.types as x
-) as ty
-	ON c.system_type_id = ty.system_type_id
+INNER JOIN sys.types as st
+	ON c.system_type_id = st.system_type_id
+LEFT OUTER JOIN @dtc as dtc
+	ON st.[name] = dtc.source_type
 WHERE t.object_id = @object_id
-AND ty.source_type NOT IN ('sysname')
+AND dtc.source_type NOT IN ('sysname')
 ORDER BY c.column_id;
 
 -- do we have a primary key?
@@ -117,21 +163,39 @@ SELECT @create_table_script += ');
 END
 $$ LANGUAGE plpgsql;'
 
--- this will get the script to appear in the messages tab of SSMS.
--- un-comment this out if you need to test this in ssms.
--- Print @create_table_script;
+/*
+	this PRINT gets the script to appear in the messages tab of SSMS.
+	un-comment this if you need to test this in SSMS. Un-commenting
+	it here (in the python script) would likely break the execution.
+
+	PRINT @create_table_script;
+*/
 
 SELECT @create_table_script as create_table_script;
 """
 
 def get_create_table_script(object_id: int, source_engine: sqlalchemy.engine.base.Engine) -> str:
     """Return a CREATE TABLE script for the given SQL Server table object_id."""
-    # print(f"Generating CREATE TABLE script for object_id = {object_id}")
-    with source_engine.connect() as conn:
-        # print(f"CREATE TABLE script for object_id = {object_id}:\n{script_maker}") 
-        result = conn.execute(sqlalchemy.text(script_maker), {"oid": object_id})
-        # print(f"result: {result}")
-        create_table_script = result.scalar_one_or_none()
-        # print(f"CREATE TABLE script for object_id = {object_id}:\n{create_table_script}")
+    script = script_maker.replace(':oid', str(object_id))
+    # c_log(f"Generating CREATE TABLE script for object_id = {object_id}", script)
 
-    return create_table_script or ""    
+    try:
+        with source_engine.connect() as conn:
+            # Execute the script and fetch the single result
+            result = conn.execute(sqlalchemy.text(script))
+            
+            # Fetch the single row
+            row = result.fetchone()
+            
+            # The script returns one column named 'create_table_script'
+            create_table_script = row[0] if row else None
+            
+            # Close the result
+            result.close()
+        
+    except Exception as e:
+        c_log(f"Error executing CREATE TABLE script for object_id = {object_id}: {str(e)}")
+        raise
+
+    c_log(f"CREATE TABLE script for object_id = {object_id}", f"{create_table_script}")
+    return create_table_script or ""
