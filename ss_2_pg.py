@@ -14,6 +14,9 @@ import process_table as pt
 
 
 def main():
+    if cfg.clear_log_file_at_start:
+        cfg.empty_the_log_file()
+
     source_engine = sqlalchemy.create_engine(
         cfg.sql_server_connection_string,
         pool_size = cfg.active_threads,
@@ -33,7 +36,7 @@ def main():
     )
 
     ss_tables = st.source_tables(source_engine)
-    print(ss_tables.head())
+    # print(ss_tables.head())
 
     # process tables level-by-level (lvl=0 first)
     lvls = sorted(ss_tables['lvl'].unique())
@@ -43,7 +46,8 @@ def main():
         tables = rows['table_name'].tolist()
         object_ids = rows['object_id'].tolist() 
 
-        print(f"Processing level {lvl} -- {len(tables)} tables (workers={cfg.active_threads})")
+        message = f"Processing level {lvl} -- {len(tables)} tables (workers={cfg.active_threads})"
+        cfg.log_to_the_log_file(message)
 
         results = []
         with concurrent.futures.ThreadPoolExecutor(max_workers=cfg.active_threads) as exe:
@@ -58,7 +62,7 @@ def main():
                     msg = str(exc)
                     tbl = table
                 status = "OK" if ok else "FAILED"
-                print(f"{status}: {tbl} -- {msg}")
+                cfg.log_to_the_log_file(f"{status}: {tbl} -- {msg}")
                 results.append((tbl, ok, msg))
 
         # Small pause between levels because it feels right.

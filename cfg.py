@@ -4,6 +4,7 @@
 # Doug@HillsBrother.com
 
 import urllib.parse
+from datetime import datetime
 
 package_name = 'SQL Server to PostgreSQL data migration tool'
 
@@ -16,9 +17,15 @@ create_pg_target_when_not_exists = False
 # when I'm paging a table, how many rows per page?
 chunk_size = 10000
 
-I_am_testing = False
+I_am_testing = True
 
-log_file = '/mnt/local_storage/pg_logs/paging_queries.txt'
+yes_log_the_whole_huge_command = False
+
+truncated_command_length = 1000
+
+log_file = 'logs/paging_queries.txt'
+
+clear_log_file_at_start = True
 
 #sql server connection
 sql_server = {
@@ -60,8 +67,24 @@ postgres_connection_string = (
     f'postgresql+psycopg://{postgres["user"]}:{postgres["pwd"]}@{postgres["host"]}:{postgres["port"]}/{postgres["database"]}'
 )
 
-def log_to_the_log_file (message: str):
+def empty_the_log_file():
+    with open(log_file, "w", encoding="utf-8") as f:
+        pass
+
+def log_to_the_log_file (subject: str, body: str = ""):
+    body_text = ''
     if I_am_testing:
+        if body:
+            if yes_log_the_whole_huge_command or len(body) <= truncated_command_length:
+                body_text = body
+            else:
+                remaining_length = len(body) - truncated_command_length
+                body_text = body[:truncated_command_length] + " . . . + [" + str(remaining_length) + "]"
+
+        first_line = f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] " + subject
+
         with open(log_file, 'a', encoding="utf-8") as f:
-            f.write(message)
-            f.write("\n")
+            f.write(first_line + '\n')
+            if body_text:
+                f.write(body_text + '\n')
+                f.write("---------------------------------------------\n")

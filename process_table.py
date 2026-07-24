@@ -55,7 +55,7 @@ def push_to_pg(df, target_engine: sa.engine.base.Engine, two_part_table_name: st
             pg_type = coercion.get(dtype, "")
 
             if not pg_type:
-                print(f"What should I do with this dtype? {dtype} -> {pg_type}")
+                cfg.log_to_the_log_file(f"What should I do with this dtype? {dtype} -> {pg_type}")
 
             if pd.isna(val):
                 values.append(f"NULL::{pg_type}")
@@ -75,25 +75,21 @@ def push_to_pg(df, target_engine: sa.engine.base.Engine, two_part_table_name: st
 
     the_big_insert_command = f"INSERT INTO {schema}.{table} ({columns}) \n VALUES \n    {values_blob};"
         
-    print(f"Pushing {len(df)} rows to {schema}.{table}")
-    cfg.log_to_the_log_file(the_big_insert_command)
-    #print(the_big_insert_command)
-    #print("------------------------------------")
+    cfg.log_to_the_log_file(f"Pushing {len(df)} rows to {schema}.{table}")
+    cfg.log_to_the_log_file(f"{schema}.{table}", the_big_insert_command)
+    cfg.log_to_the_log_file("------------------------------------")
 
     with target_engine.begin() as conn:
         result = conn.execute(sa.text(the_big_insert_command))
-        print(f"result: {result.rowcount}")
+        cfg.log_to_the_log_file(f"{schema}.{table}: {result.rowcount} rows")
 
     #raise RuntimeError("stop here")
-
-    # df.to_sql(table, con=target_engine, schema=schema, if_exists='append', index=False, method=insert_method)
 
 def process_table(
     object_id: int, 
     source_engine: sa.engine.base.Engine, 
     target_engine: sa.engine.base.Engine
 ) -> tuple[str, bool, str]:
-    #print(f"process_table object_id = {object_id}")
 
     """Process a single source table and write it to the target PostgreSQL engine."""
     table_name = None
@@ -123,11 +119,11 @@ def process_table(
             # print(f"Table {pg_name} exists in PostgreSQL: {exists}")
 
         if not exists:
-            print(f"Table {pg_name} does not exist in PostgreSQL. Creating it.")
+            cfg.log_to_the_log_file(f"Table {pg_name} does not exist in PostgreSQL. Creating it.")
             if cfg.create_pg_target_when_not_exists:
                 create_table_script = tcs.get_create_table_script(object_id, source_engine)
 
-                print(f"CREATE TABLE script for {pg_name}:\n{create_table_script}")
+                cfg.log_to_the_log_file(f"CREATE TABLE script for {pg_name}:\n{create_table_script}")
 
                 if not create_table_script:
                     raise ValueError(f"Could not generate CREATE TABLE script for object_id = {object_id}")
@@ -147,18 +143,18 @@ def process_table(
                     exists = result.scalar_one_or_none()    
 
                 if exists:
-                    print(f"Successfully created table {pg_name} in PostgreSQL.")
+                    cfg.log_to_the_log_file(f"Successfully created table {pg_name} in PostgreSQL.")
+
                 else:
-                    msg = f"Failed to create table {pg_name} in PostgreSQL."
-                    print(msg)
+                    cfg.log_to_the_log_file(f"Failed to create table {pg_name} in PostgreSQL.")
                     return table_name, False, msg
 
             else:
                 msg = f"Skipped {table_name} -> {pg_name}: target does not exist and create_pg_target_when_not_exists is False."
-                print(msg)
+                cfg.log_to_the_log_file(msg)
                 return table_name, False, msg
 
-        print(f"Processing table {table_name} (object_id={object_id}) -> {pg_name}")
+        cfg.log_to_the_log_file(f"Processing table {table_name} (object_id={object_id}) -> {pg_name}")
 
         # TRUNCATE the target table 
         with target_engine.begin() as trgt_conn:
@@ -200,7 +196,7 @@ def process_table(
                     break
 
                 push_to_pg(rows, target_engine, pg_name)
-                print(f"Fetched {len(rows)} rows from {table_name} -> {pg_name} (page {page_no})")
+                cfg.log_to_the_log_file(f"Fetched {len(rows)} rows from {table_name} -> {pg_name} (page {page_no})")
 
                 page_no += 1
 
@@ -214,8 +210,8 @@ def process_table(
         return table_name, True, select_query
 
     except Exception as exc:
-        print(
+        cfg.log_to_the_log_file(
             f"table_name: {table_name!r} pk_fields: {pk_fields!r} select_fields: {select_fields!r} "
         )
-        print(f"Error processing table with {select_query!r}: {exc}")
+        cfg.log_to_the_log_file(f"Error processing table with {select_query!r}: {exc}")
         return f"object_id = {object_id}", False, str(exc)

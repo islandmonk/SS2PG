@@ -35,6 +35,7 @@ Doug@HillsBrother.com
 ```bash
 python -m venv .venv
 source .venv/bin/activate
+# for me: source .venv/bin/activate.fish
 ```
 
 2. Install the project:

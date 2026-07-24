@@ -28,6 +28,7 @@ Thumbs.db
 
 # Logs and runtime files
 *.log
+logs/paging_queries.txt
 
 # SQLAlchemy / build artifacts
 *.sqlite
