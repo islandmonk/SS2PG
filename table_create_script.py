@@ -9,9 +9,9 @@ SET NOCOUNT ON;
 DECLARE 
 	  @object_id bigint = :oid -- the object_id of the table you want to create a script for
 
-      -- Be careful below here. This is a script, when executed against an actual @object_id, 
-      -- will generate a corresponding postgres CREATE TABLE statement.
-      -- Doug@HillsBrother.com
+	-- Be careful below here. This is a script that, when executed against an actual @object_id, 
+	-- will generate a corresponding postgres CREATE TABLE statement.
+	-- Doug@HillsBrother.com
 
 	, @cr CHAR(2) = CHAR(13) + CHAR(10) -- carriage return
 	, @tab CHAR(1) = CHAR(9)
@@ -26,7 +26,7 @@ SELECT @create_table_script = 'DO $$ ' + @cr + 'BEGIN' + @cr
 -- therefore, won't give meaningful results.
 
 DECLARE @dtc TABLE (
-	source_type varchar(32) PRIMARY KEY
+	  source_type varchar(32) PRIMARY KEY
 	, pg_type varchar(32) NOT NULL
 );
 
@@ -164,8 +164,8 @@ END
 $$ LANGUAGE plpgsql;'
 
 /*
-	this PRINT gets the script to appear in the messages tab of SSMS.
-	un-comment this if you need to test this in SSMS. Un-commenting
+	this PRINT command gets the script to appear in the messages tab of
+	SSMS. Un-comment this if you need to test this in SSMS. Un-commenting
 	it here (in the python script) would likely break the execution.
 
 	PRINT @create_table_script;
@@ -177,7 +177,7 @@ SELECT @create_table_script as create_table_script;
 def get_create_table_script(object_id: int, source_engine: sqlalchemy.engine.base.Engine) -> str:
     """Return a CREATE TABLE script for the given SQL Server table object_id."""
     script = script_maker.replace(':oid', str(object_id))
-    # c_log(f"Generating CREATE TABLE script for object_id = {object_id}", script)
+    c_log(f"Generating CREATE TABLE script for object_id = {object_id}", script)
 
     try:
         with source_engine.connect() as conn:
@@ -194,8 +194,8 @@ def get_create_table_script(object_id: int, source_engine: sqlalchemy.engine.bas
             result.close()
         
     except Exception as e:
-        c_log(f"Error executing CREATE TABLE script for object_id = {object_id}: {str(e)}")
+        c_log(f"Error executing CREATE TABLE script for object_id = {object_id}", e)
         raise
 
-    c_log(f"CREATE TABLE script for object_id = {object_id}", f"{create_table_script}")
+    #c_log(f"CREATE TABLE script for object_id = {object_id}", f"{create_table_script}")
     return create_table_script or ""

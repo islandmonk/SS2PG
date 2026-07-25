@@ -49,7 +49,7 @@ def main():
         object_ids = rows['object_id'].tolist() 
 
         message = f"Processing level {lvl} -- {len(tables)} tables (workers={cfg.active_threads})"
-        cfg.log_to_the_log_file(message)
+        c_log(message)
 
         results = []
         with concurrent.futures.ThreadPoolExecutor(max_workers=cfg.active_threads) as exe:
@@ -63,8 +63,9 @@ def main():
                     ok = False
                     msg = str(exc)
                     tbl = table
+                    
                 status = "OK" if ok else "FAILED"
-                cfg.log_to_the_log_file(f"{status}: {tbl} -- {msg}")
+                c_log(f"{status}: {tbl} -- {msg}")
                 results.append((tbl, ok, msg))
 
         # Small pause between levels because it feels right.
