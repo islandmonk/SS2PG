@@ -9,14 +9,14 @@ import inspect
 
 package_name = 'SQL Server to PostgreSQL data migration tool'
 
-active_threads = 1
+active_threads = 3
 
 # If True, and the target table doesn't exist, the script will attempt to create the target table in PG.
 # If the schema doesn't exist, it will also be created. This might not be desired behavior.
 create_pg_target_when_not_exists = True
 
 # when I'm paging a table, how many rows per page?
-chunk_size = 1000
+chunk_size = 100
 
 I_am_logging = True
 I_am_testing = False # True keeps the data volumes lower

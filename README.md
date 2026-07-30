@@ -37,6 +37,9 @@ IMPORTANT:
 
     Check: GRANT VIEW DATABASE STATE TO [YourUser]
 
+Progress bars are added for your viewing enjoyment. They seem to work clumbsily when 
+multi-threading but they 'work.' 
+
 requires-python >= 3.10
 On different platforms
 Linux: need unixodbc (or equivalent) plus the SQL Server ODBC driver

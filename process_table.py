@@ -15,10 +15,10 @@ c_log = cfg.log_to_the_log_file
 # Define style once globally
 PROGRESS_STYLE = Style.from_dict({
     'label': 'bg:#000000 #ffff00',
-    'percentage': 'bg:#ffff00 #000000',
+    'percentage': 'bg:#ffcfb1 #000000',
     'current': '#448844',
     'bar': '',
-    'bar-a': 'bg:#00ff00 #000000',  # Green completed section
+    'bar-a': 'bg:#01754f #000000',  # Green completed section
     'bar-b': 'bg:#ffffff #000000',  # White progress bar head
     'bar-c': 'bg:#444444',           # Dark incomplete section
     'time-elapsed': '#888888',
@@ -30,7 +30,7 @@ custom_formatters = [
     formatters.Text(' '),
     formatters.Percentage(),
     formatters.Text(' '),
-    formatters.Bar(sym_a='-', sym_b='|', sym_c='.'),
+    formatters.Bar(sym_a='-', sym_b='<', sym_c='.'),
     formatters.Text('  '),
 ]
 
@@ -198,7 +198,7 @@ def process_table(
 
             with ProgressBar(style=PROGRESS_STYLE, formatters=custom_formatters) as pb:
                 # The key: pb() wraps your iterable
-                total_rows_expected = tmd.expected_row_count + 1
+                total_rows_expected = tmd.expected_row_count or 1
                 counter : ProgressBarCounter = pb(
                     total=total_rows_expected, 
                     label=f"{tmd.sql_server_name}"

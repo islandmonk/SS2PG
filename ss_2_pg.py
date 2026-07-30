@@ -9,7 +9,9 @@ import time
 import cfg
 import source_tables as st
 import process_table as pt
-import threading
+import os
+
+os.environ['PROMPT_TOOLKIT_NO_CPR'] = '1'
 
 c_log = cfg.log_to_the_log_file
 
