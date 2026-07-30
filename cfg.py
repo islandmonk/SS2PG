@@ -16,14 +16,14 @@ active_threads = 1
 create_pg_target_when_not_exists = True
 
 # when I'm paging a table, how many rows per page?
-chunk_size = 10000
+chunk_size = 1000
 
 I_am_logging = True
-I_am_testing = True # True keeps the data volumes lower
+I_am_testing = False # True keeps the data volumes lower
 
 # this script generates huge insert commands. Sometimes you want to see
 # the whole thing. Usually you don't
-yes_log_the_whole_huge_command = False
+I_want_to_log_the_whole_huge_command = False
 
 truncated_command_length = 1000
 
@@ -76,19 +76,17 @@ def empty_the_log_file():
         pass
 
 def log_to_the_log_file (subject: str, body: any = ""):
-    body_text = str(body)
+    body_text = str(body) or ""
+
     if I_am_testing or I_am_logging:
         # Get the calling module name
         caller_frame = inspect.currentframe().f_back
         caller_module = inspect.getmodule(caller_frame).__name__
         caller_lineno = caller_frame.f_lineno
         
-        if body:
-            if yes_log_the_whole_huge_command or len(body) <= truncated_command_length:
-                body_text = body
-            else:
-                remaining_length = len(body) - truncated_command_length
-                body_text = body[:truncated_command_length] + " . . . + [" + str(remaining_length) + "]"
+        if I_want_to_log_the_whole_huge_command and len(body_text) > truncated_command_length:
+            remaining_length = len(body_text) - truncated_command_length
+            body_text = body_text[:truncated_command_length] + " . . . + [" + str(remaining_length) + "]"
 
         first_line = f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] [{caller_module}:{caller_lineno}] " + subject
 

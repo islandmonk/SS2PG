@@ -18,28 +18,33 @@ def existing_target_columns(
     """
 
     #c_log(f'existing target column data types {pg_name}', column_enumeration_text)
-
-    conn = target_engine.connect()
     
     try:
-        c_log(f'about to execute {pg_name}')
-        result = conn.execute(sa.text(column_enumeration_text), {"schema": schema, "table": table})
+        with target_engine.connect() as conn:
+            c_log(f'about to execute {pg_name}')
+            result = conn.execute(
+                sa.text(column_enumeration_text), 
+                {"schema": schema, "table": table}
+            )
 
-        # Log what type of result we have
-        #c_log('Result type:', str(type(result)))
-        #c_log('Result attributes:', str(dir(result)))
-    
+            # Log what type of result we have
+            #c_log('Result type:', str(type(result)))
+            #c_log('Result attributes:', str(dir(result)))
+        
 
-        rows = result.fetchall()
-        #c_log('fetchall() returned:', str(rows))
-        #c_log('fetchall() length:', str(len(rows)))
-        #c_log(f'column count ', str(rows.count()))
+            rows = result.fetchall()
+            #c_log('fetchall() returned:', str(rows))
+            #c_log('fetchall() length:', str(len(rows)))
+            #c_log(f'column count ', str(rows.count()))
 
-        column_dict = {row[0]: row[1] for row in rows}
-        #c_log(f'Column dictionary:  {pg_name}', str(column_dict))
-        return column_dict
+            column_dict = {row[0]: row[1] for row in rows}
+            #c_log(f'Column dictionary:  {pg_name}', str(column_dict))
+            return column_dict
 
     except Exception as e:
         c_log(f"Failed executing column enumeration {pg_name}", {e})        
-        raise RuntimeError(f"Failed executing column enumeration {pg_name}: {e}")        
+        raise RuntimeError(f"Failed executing column enumeration {pg_name}: {e}")   
+
+    finally:
+        conn.close()     
 

@@ -11,16 +11,16 @@ def pg_table_exists (pg_name: str, target_engine:sa.engine.base.Engine) -> bool:
         SELECT EXISTS (
             SELECT 1::int 
             FROM information_schema.tables 
-            WHERE table_schema = '{schema}'
-            AND table_name = '{table}'
+            WHERE table_schema = :schema
+            AND table_name = :table
         );
 
     """
-    # c_log(f"table existence script {pg_name}", table_existence_text)        
+    #c_log(f"table existence script {pg_name}", table_existence_text)        
 
     try:
         with target_engine.connect() as conn:
-            result = conn.execute(sa.text(table_existence_text))
+            result = conn.execute(sa.text(table_existence_text), {"schema": schema, "table": table})
             exists = result.scalar_one_or_none()   
             c_log(f"the answer to the question, does {pg_name} exist? is [{exists}]")        
 

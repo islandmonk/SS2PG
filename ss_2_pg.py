@@ -1,8 +1,6 @@
 '''
     Doug@HillsBrother.com
 '''
-from prompt_toolkit.shortcuts import ProgressBar
-from prompt_toolkit.formatted_text import FormattedText
 import concurrent.futures
 import pandas as pd
 import pyodbc
@@ -11,14 +9,11 @@ import time
 import cfg
 import source_tables as st
 import process_table as pt
+import threading
 
 c_log = cfg.log_to_the_log_file
 
-
 def main():
-    if cfg.clear_log_file_at_start:
-        cfg.empty_the_log_file()
-
     source_engine = sqlalchemy.create_engine(
         cfg.sql_server_connection_string,
         pool_size = cfg.active_threads,
@@ -53,7 +48,10 @@ def main():
 
         results = []
         with concurrent.futures.ThreadPoolExecutor(max_workers=cfg.active_threads) as exe:
-            future_to_table = {exe.submit(pt.process_table, o, source_engine, target_engine): o for o in object_ids}
+            future_to_table = {
+                exe.submit(pt.process_table, o, source_engine, target_engine): o for o in object_ids
+            }
+            
             for fut in concurrent.futures.as_completed(future_to_table):
                 table = future_to_table[fut]
                 try:
