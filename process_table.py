@@ -124,7 +124,7 @@ def process_table(
 
         if exists:
             # The table exists. Right now, we know what we'd like the target columns types
-            # should be. Right here, we need to see what they actually are. We're going to
+            # should be. Here, we should see what they actually are. We're going to
             # do our best to push what we've got into those holes. This doesn't always work
             c_log(f'the table exists:  {tmd.pg_name}')
             #target_columns = tc.existing_target_columns(pg_name=pg_name, target_engine=target_engine)
